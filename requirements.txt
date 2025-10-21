@@ -1,2 +1,6 @@
 streamlit
 firebase-admin
+matplotlib
+pandas
+numpy
+requests
