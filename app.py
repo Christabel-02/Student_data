@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 st.title("📊 Cloud-Based Student Marks Dashboard")
 
-cred = credentials.Certificate("/studentdashboard-31ab6-firebase-adminsdk-fbsvc-2bf91e5a7c.json)
+cred = credentials.Certificate("firebase_key.json)
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {
         'databaseURL': 'https://student-dashboard-default-rtdb.firebaseio.com/'
