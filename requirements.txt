@@ -4,3 +4,8 @@ matplotlib
 pandas
 numpy
 requests
+streamlit==1.39.0
+pandas==2.2.2
+firebase-admin==6.5.0
+plotly==5.24.1
+python-dateutil==2.9.0.post0
