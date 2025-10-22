@@ -1,44 +1,107 @@
 import streamlit as st
+import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, db
-import matplotlib.pyplot as plt
+from datetime import date
+import plotly.express as px
 
-st.set_page_config(page_title="📊 Student Marks Dashboard", layout="wide")
-st.title("📊 Cloud-Based Student Marks Dashboard")
+# ----------------------------
+# Firebase Initialization
+# ----------------------------
+if not firebase_admin._apps:
+    firebase_config = st.secrets["firebase"]
+    cred = credentials.Certificate(firebase_config)
+    firebase_admin.initialize_app(cred, {
+        "databaseURL": firebase_config["databaseURL"]
+    })
 
-# --- Load Firebase config from Streamlit Secrets ---
-firebase_config = st.secrets["firebase"]
+# ----------------------------
+# Streamlit Page Setup
+# ----------------------------
+st.set_page_config(page_title="Cloud-Based Student Marks Dashboard", layout="wide")
 
-# Replace escaped newlines with actual newlines
-firebase_config["private_key"] = firebase_config["private_key"].replace("\\n", "\n")
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"] {
+            background-color: #1E1E1E;
+            color: white;
+        }
+        h1, h2, h3, h4 {
+            color: #f1f1f1 !important;
+        }
+        .stButton>button {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-try:
-    # Initialize Firebase app if not already initialized
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(firebase_config)
-        firebase_admin.initialize_app(cred, {
-            "databaseURL": "https://student-dashboard-default-rtdb.firebaseio.com/"
+# ----------------------------
+# Sidebar: Add / Manage Marks
+# ----------------------------
+st.sidebar.header("Add / Manage Marks")
+
+name = st.sidebar.text_input("Student Name")
+student_id = st.sidebar.text_input("Student ID (optional)")
+subject = st.sidebar.text_input("Subject")
+marks = st.sidebar.number_input("Marks (0-100)", min_value=0, max_value=100, step=1)
+today = st.sidebar.date_input("Date", value=date.today())
+
+if st.sidebar.button("Add Record"):
+    if name and subject:
+        ref = db.reference("/marks")
+        ref.push({
+            "name": name,
+            "student_id": student_id if student_id else "-",
+            "subject": subject,
+            "marks": marks,
+            "date": str(today)
         })
-    st.success("✅ Firebase connection established successfully!")
-except Exception as e:
-    st.error(f"🔥 Error connecting to Firebase: {e}")
-
-# --- Fetch student data ---
-try:
-    ref = db.reference("students")
-    data = ref.get()
-    
-    if data:
-        st.write("### Student Marks Data", data)
-        for student, subjects in data.items():
-            st.subheader(f"{student}'s Marks")
-            fig, ax = plt.subplots()
-            ax.bar(subjects.keys(), subjects.values(), color="skyblue")
-            ax.set_xlabel("Subjects")
-            ax.set_ylabel("Marks")
-            ax.set_title(f"{student}'s Performance")
-            st.pyplot(fig)
+        st.sidebar.success("Record added successfully!")
     else:
-        st.info("No student data found in Firebase.")
+        st.sidebar.error("Please enter student name and subject")
+
+# ----------------------------
+# Fetch Data from Firebase
+# ----------------------------
+st.title("🎓 Cloud-Based Student Marks Dashboard")
+
+try:
+    ref = db.reference("/marks")
+    data = ref.get()
+
+    if data:
+        df = pd.DataFrame(data.values())
+        st.subheader("📊 Dashboard - All Records")
+        st.dataframe(df)
+
+        # Filters
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            selected_subject = st.selectbox("Filter by Subject", ["All"] + sorted(df["subject"].unique().tolist()))
+        with col2:
+            selected_student = st.selectbox("Filter by Student", ["All"] + sorted(df["name"].unique().tolist()))
+        with col3:
+            show_chart = st.checkbox("Show Charts", value=True)
+
+        filtered_df = df.copy()
+        if selected_subject != "All":
+            filtered_df = filtered_df[filtered_df["subject"] == selected_subject]
+        if selected_student != "All":
+            filtered_df = filtered_df[filtered_df["name"] == selected_student]
+
+        # Display Average / Aggregate
+        st.subheader("📈 Average Marks by Subject")
+        avg_df = filtered_df.groupby("subject")["marks"].mean().reset_index()
+        st.dataframe(avg_df)
+
+        if show_chart:
+            fig = px.bar(avg_df, x="subject", y="marks", title="Average Marks by Subject", text_auto=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.warning("No records found. Please add some data.")
 except Exception as e:
-    st.error(f"🔥 Error fetching data from Firebase: {e}")
+    st.error(f"Error fetching data from Firebase: {e}")
